@@ -33,7 +33,14 @@ if not api_key:
     st.warning("API 키가 설정되지 않았습니다. 사이드바에 입력해주세요.")
     st.stop()
 
-client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=api_key)
+client = OpenAI(
+    base_url="https://openrouter.ai/api/v1",
+    api_key=api_key,
+    default_headers={
+        "HTTP-Referer": "https://github.com/djchany/bogum-chat",
+        "X-Title": "Bogum Chat"
+    }
+)
 
 # --- 2. 캐릭터 프롬프트 ---
 CHARACTER_PROMPT = """
