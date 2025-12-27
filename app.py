@@ -3,28 +3,13 @@ from openai import OpenAI
 import json
 import os
 import re
-import base64
 
-# --- 1. 초기 설정 및 이미지 처리 ---
+# --- 1. 초기 설정 ---
 st.set_page_config(page_title="박보검(양관식)과 대화", layout="wide")
 
-# 이미지를 읽어서 Base64로 변환하는 함수 (캐싱 적용으로 속도 향상)
-@st.cache_data
-def get_base64_image(image_path):
-    # 시도해볼 후보 파일명들 (대소문자 및 확장자 대응)
-    possible_files = [image_path, image_path.lower(), image_path.upper(), "profile.jpg", "profile.JPG", "profile.jpeg"]
-    
-    for file_name in possible_files:
-        if os.path.exists(file_name):
-            try:
-                with open(file_name, "rb") as img_file:
-                    return base64.b64encode(img_file.read()).decode()
-            except Exception:
-                continue
-    return ""
-
-# 실제 호출 부분
-img_base64 = get_base64_image("profile.jpg")
+# 깃허브에 올린 이미지의 Raw URL 주소
+# (이 주소는 브라우저가 직접 이미지를 불러오기 때문에 절대 경로/상대 경로 오류가 없습니다)
+PROFILE_IMAGE_URL = "https://raw.githubusercontent.com/djchany/bogum-chat/main/profile.jpg"
 
 SAVE_DIR = "chat_history"
 if not os.path.exists(SAVE_DIR):
@@ -54,21 +39,20 @@ CHARACTER_PROMPT = """
 당신은 드라마 '폭싹 속았수다'의 주인공 '양관식'입니다. 이름은 '박보검'으로 활동합니다.
 
 [절대 규칙]
-1. 당신은 오직 '한국어'와 '제주도 방언'으로만 대답합니다. 아랍어, 영어, 한자 등 외국어는 절대 사용하지 마세요.
+1. 당신은 오직 '한국어'와 '제주도 방언'으로만 대답합니다. 외국어는 절대 사용하지 마세요.
 2. 당신은 남성이며, 상대방은 짝사랑하는 친구 '제우리'입니다.
-3. 소설을 쓰지 마세요. 상대방의 대사나 행동을 대신 작성하지 말고, 오직 당신의 반응만 출력하세요.
+3. 소설을 쓰지 마세요. 상대방의 대사나 행동을 대신 작성하지 말고, 당신의 반응만 출력하세요.
 4. 행동 묘사는 반드시 괄호 ( )를 사용하고 10자 이내로 짧게 하세요.
 
 [캐릭터 특징]
 - 1950년대 제주도 소년의 순수함과 성실함.
-- 말수가 적고 무뚝뚝하지만 속마음은 따뜻한 일편단심.
-- 행동이나 상황 묘사는 반드시 괄호 ( )를 사용하세요.
-- 배경이 제주도이므로 아주 가끔 정감 있는 제주도 억양을 사용하세요.
+- 무뚝뚝하지만 속마음은 따뜻한 일편단심.
+- 말투: "~했수다", "~하구마" 같은 제주 방언을 적절히 섞어 사용하세요.
 """
 
 # --- 3. 유틸리티 함수 ---
 def format_chat_text(text):
-    # 괄호 안의 내용을 찾아 스타일 변경
+    # 괄호 지문 스타일링
     formatted = re.sub(
         r'(\s*\([^)]+\)\s*)', 
         r'<span class="action-text">\1</span>', 
@@ -82,8 +66,7 @@ if "current_file" not in st.session_state:
     st.session_state.current_file = None
 
 def save_chat(filename):
-    if not filename.endswith(".json"):
-        filename += ".json"
+    if not filename.endswith(".json"): filename += ".json"
     filepath = os.path.join(SAVE_DIR, filename)
     with open(filepath, "w", encoding="utf-8") as f:
         json.dump(st.session_state.messages, f, ensure_ascii=False, indent=4)
@@ -119,18 +102,6 @@ with st.sidebar:
                     st.session_state.current_file = None
                 st.rerun()
 
-    st.divider()
-    if st.session_state.messages:
-        st.subheader("💾 대화 저장")
-        current_name_val = st.session_state.current_file.replace('.json', '') if st.session_state.current_file else "새 대화"
-        new_name = st.text_input("대화 이름", value=current_name_val)
-        if st.button("저장/이름 변경"):
-            if st.session_state.current_file and st.session_state.current_file != f"{new_name}.json":
-                old_path = os.path.join(SAVE_DIR, st.session_state.current_file)
-                if os.path.exists(old_path): os.remove(old_path)
-            st.session_state.current_file = save_chat(new_name)
-            st.rerun()
-
 # --- 5. CSS ---
 st.markdown("""
     <style>
@@ -139,10 +110,20 @@ st.markdown("""
     .user-row { justify-content: flex-end; }
     .bot-row { justify-content: flex-start; }
     .bot-container { display: flex; align-items: flex-start; gap: 10px; max-width: 85%; }
-    .profile-img { width: 50px !important; height: 50px !important; min-width: 50px; border-radius: 18px; object-fit: cover; }
+    
+    /* 프로필 사진 고정 크기 및 디자인 */
+    .profile-img { 
+        width: 50px !important; 
+        height: 50px !important; 
+        min-width: 50px; 
+        border-radius: 18px; 
+        object-fit: cover; 
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    
     .bot-content { display: flex; flex-direction: column; gap: 5px; }
-    .bot-name { font-size: 15px; color: #2c3e50; font-weight: 600; }
-    .chat-bubble { padding: 10px 14px; border-radius: 12px; font-size: 15px; line-height: 1.5; box-shadow: 0 1px 2px rgba(0,0,0,0.1); word-break: break-all; }
+    .bot-name { font-size: 16px; color: #2c3e50; font-weight: 600; }
+    .chat-bubble { padding: 10px 14px; border-radius: 12px; font-size: 15px; line-height: 1.5; box-shadow: 0 1px 2px rgba(0,0,0,0.1); word-break: break-all; color: #000000 !important; /* 전체 글자 검정색 */}
     .user-bubble { background-color: #fee500; border-top-right-radius: 2px; }
     .bot-bubble { background-color: #ffffff; border-top-left-radius: 2px; }
     .action-text { color: #666; font-style: italic; background-color: #f0f0f0; padding: 2px 5px; border-radius: 4px; font-size: 0.9em; }
@@ -158,11 +139,14 @@ for msg in st.session_state.messages:
         st.markdown(f'<div class="chat-row user-row"><div class="chat-bubble user-bubble">{msg["content"]}</div></div>', unsafe_allow_html=True)
     elif msg["role"] == "assistant":
         formatted_text = format_chat_text(msg["content"])
-        p_img = f'<img src="data:image/jpeg;base64,{img_base64}" class="profile-img">' if img_base64 else '<div class="profile-img" style="background:#ddd; display:flex; align-items:center; justify-content:center;">👤</div>'
+        
+        # 외부 URL을 사용하여 이미지 태그 생성
+        p_img_tag = f'<img src="{PROFILE_IMAGE_URL}" class="profile-img" onerror="this.onerror=null; this.src=\'https://api.dicebear.com/7.x/avataaars/svg?seed=Felix\';">'
+        
         st.markdown(f'''
             <div class="chat-row bot-row">
                 <div class="bot-container">
-                    {p_img}
+                    {p_img_tag}
                     <div class="bot-content">
                         <div class="bot-name">박보검</div>
                         <div class="chat-bubble bot-bubble">{formatted_text}</div>
@@ -177,9 +161,8 @@ if prompt := st.chat_input("메시지를 입력하세요..."):
     st.rerun()
 
 if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
-    with st.spinner("박보검님이 입력 중..."):
+    with st.spinner("박보검님이 생각 중..."):
         try:
-            # 모델명을 확인하세요. 무료 모델은 자주 변경됩니다.
             response = client.chat.completions.create(
                 model="xiaomi/mimo-v2-flash:free", 
                 messages=[{"role": "system", "content": CHARACTER_PROMPT}] + st.session_state.messages
