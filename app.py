@@ -11,16 +11,19 @@ st.set_page_config(page_title="박보검(양관식)과 대화", layout="wide")
 # 이미지를 읽어서 Base64로 변환하는 함수 (캐싱 적용으로 속도 향상)
 @st.cache_data
 def get_base64_image(image_path):
-    try:
-        # 파일이 존재하는지 먼저 확인
-        if os.path.exists(image_path):
-            with open(image_path, "rb") as img_file:
-                return base64.b64encode(img_file.read()).decode()
-    except Exception as e:
-        print(f"이미지 로딩 오류: {e}")
+    # 시도해볼 후보 파일명들 (대소문자 및 확장자 대응)
+    possible_files = [image_path, image_path.lower(), image_path.upper(), "profile.jpg", "profile.JPG", "profile.jpeg"]
+    
+    for file_name in possible_files:
+        if os.path.exists(file_name):
+            try:
+                with open(file_name, "rb") as img_file:
+                    return base64.b64encode(img_file.read()).decode()
+            except Exception:
+                continue
     return ""
 
-# 이미지 로드 (파일명이 '프로필사진.jpg'인지 다시 확인하세요)
+# 실제 호출 부분
 img_base64 = get_base64_image("profile.jpg")
 
 SAVE_DIR = "chat_history"
