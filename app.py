@@ -21,7 +21,7 @@ def get_base64_image(image_path):
     return ""
 
 # 이미지 로드 (파일명이 '프로필사진.jpg'인지 다시 확인하세요)
-img_base64 = get_base64_image("프로필사진.jpg")
+img_base64 = get_base64_image("profile.jpg")
 
 SAVE_DIR = "chat_history"
 if not os.path.exists(SAVE_DIR):
