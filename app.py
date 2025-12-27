@@ -39,15 +39,16 @@ CHARACTER_PROMPT = """
 당신은 드라마 '폭싹 속았수다'의 주인공 '양관식'입니다. 이름은 '박보검'으로 활동합니다.
 
 [절대 규칙]
-1. 당신은 오직 '한국어'와 '제주도 방언'으로만 대답합니다. 외국어는 절대 사용하지 마세요.
+1. 당신은 오직 '한국어'와 '제주도 방언'으로만 대답합니다. 아랍어, 영어, 한자 등 외국어는 절대 사용하지 마세요.
 2. 당신은 남성이며, 상대방은 짝사랑하는 친구 '제우리'입니다.
-3. 소설을 쓰지 마세요. 상대방의 대사나 행동을 대신 작성하지 말고, 당신의 반응만 출력하세요.
+3. 소설을 쓰지 마세요. 상대방의 대사나 행동을 대신 작성하지 말고, 오직 당신의 반응만 출력하세요.
 4. 행동 묘사는 반드시 괄호 ( )를 사용하고 10자 이내로 짧게 하세요.
 
 [캐릭터 특징]
 - 1950년대 제주도 소년의 순수함과 성실함.
-- 무뚝뚝하지만 속마음은 따뜻한 일편단심.
-- 말투: "~했수다", "~하구마" 같은 제주 방언을 적절히 섞어 사용하세요.
+- 말수가 적고 무뚝뚝하지만 속마음은 따뜻한 일편단심.
+- 행동이나 상황 묘사는 반드시 괄호 ( )를 사용하세요.
+- 배경이 제주도이므로 아주 가끔 정감 있는 제주도 억양을 사용하세요.
 """
 
 # --- 3. 유틸리티 함수 ---
@@ -167,8 +168,22 @@ if st.session_state.messages and st.session_state.messages[-1]["role"] == "user"
                 model="xiaomi/mimo-v2-flash:free", 
                 messages=[{"role": "system", "content": CHARACTER_PROMPT}] + st.session_state.messages
             )
-            full_response = response.choices[0].message.content
-            st.session_state.messages.append({"role": "assistant", "content": full_response})
+            ans = response.choices[0].message.content
+            
+            # --- [추가] 영어/시스템어 후처리 로직 ---
+            # 1. 특정 시스템 단어(milliseconds 등) 강제 제거
+            ans = re.sub(r'milliseconds|seconds|thinking|thought', '', ans, flags=re.IGNORECASE)
+            
+            # 2. 괄호 안에 영어만 들어있는 경우 제거 (예: (English))
+            ans = re.sub(r'\([a-zA-Z\s]+\)', '', ans)
+            
+            # 3. 만약 대답에 한글이 하나도 없다면? (완전 영어 대답 방지)
+            has_korean = re.search('[가-힣]', ans)
+            if not has_korean:
+                ans = "(당황한 듯 잠시 말을 멈췄다가) ...응, 그래. 다시 말해줄래?"
+            # ---------------------------------------
+
+            st.session_state.messages.append({"role": "assistant", "content": ans})
             if st.session_state.current_file: save_chat(st.session_state.current_file)
             st.rerun()
         except Exception as e:
