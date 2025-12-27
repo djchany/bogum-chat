@@ -1,31 +1,11 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
+# 모든 파일 무시
+*
 
-# Virtual Environment
-venv/
-env/
+# 추적할 파일들
+!.gitignore
+!app.py
+!requirements.txt
+!프로필사진.jpg
 
-# Environment variables
-.env
-
-# IDE
-.vscode/
-.idea/
-
-# OS generated files
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
-
-# Project specific
-.chat_history/
-*.jpg
-*.jpeg
-*.png
-*.gif
+# .gitignore 파일 자체는 제외
+!.gitignore

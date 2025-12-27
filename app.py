@@ -5,32 +5,36 @@ import os
 import re
 import base64
 
-# 이미지를 읽어서 Base64로 변환하는 함수
+# --- 1. 초기 설정 및 이미지 처리 ---
+st.set_page_config(page_title="박보검(양관식)과 대화", layout="wide")
+
+# 이미지를 읽어서 Base64로 변환하는 함수 (캐싱 적용으로 속도 향상)
+@st.cache_data
 def get_base64_image(image_path):
     try:
-        with open(image_path, "rb") as img_file:
-            return base64.b64encode(img_file.read()).decode()
-    except:
-        return ""
+        # 파일이 존재하는지 먼저 확인
+        if os.path.exists(image_path):
+            with open(image_path, "rb") as img_file:
+                return base64.b64encode(img_file.read()).decode()
+    except Exception as e:
+        print(f"이미지 로딩 오류: {e}")
+    return ""
 
-# 상단 부분에 추가
+# 이미지 로드 (파일명이 '프로필사진.jpg'인지 다시 확인하세요)
 img_base64 = get_base64_image("프로필사진.jpg")
-
-# --- 1. 초기 설정 및 저장소 준비 ---
-st.set_page_config(page_title="박보검(양관식)과 대화", layout="wide")
 
 SAVE_DIR = "chat_history"
 if not os.path.exists(SAVE_DIR):
     os.makedirs(SAVE_DIR)
 
-# API 키 설정 (Secrets 우선, 없으면 사이드바 입력)
+# API 키 설정
 if "OPENROUTER_API_KEY" in st.secrets:
     api_key = st.secrets["OPENROUTER_API_KEY"]
 else:
     api_key = st.sidebar.text_input("OpenRouter API Key 입력", type="password")
 
 if not api_key:
-    st.warning("API 키가 설정되지 않았습니다. 사이드바에 입력해주세요.")
+    st.info("사이드바에 API Key를 입력하거나 Streamlit Secrets를 설정해주세요.")
     st.stop()
 
 client = OpenAI(
@@ -59,24 +63,21 @@ CHARACTER_PROMPT = """
 - 배경이 제주도이므로 아주 가끔 정감 있는 제주도 억양을 사용하세요.
 """
 
-# --- 3. 가독성 향상을 위한 텍스트 처리 함수 ---
+# --- 3. 유틸리티 함수 ---
 def format_chat_text(text):
-    # 괄호 안의 내용(행동/생각)을 찾아 회색 이탤릭체로 변경하고, 배경색 추가
+    # 괄호 안의 내용을 찾아 스타일 변경
     formatted = re.sub(
         r'(\s*\([^)]+\)\s*)', 
-        r'<span style="color: #666; font-style: italic; background-color: #f5f5f5; padding: 2px 5px; border-radius: 4px; font-size: 0.9em; margin: 0 2px;">\1</span>', 
+        r'<span class="action-text">\1</span>', 
         text
     )
-    # 줄바꿈 처리
     return formatted.replace("\n", "<br>")
 
-# 세션 상태 초기화
 if "messages" not in st.session_state:
     st.session_state.messages = []
 if "current_file" not in st.session_state:
     st.session_state.current_file = None
 
-# --- 3. 저장/불러오기 함수 ---
 def save_chat(filename):
     if not filename.endswith(".json"):
         filename += ".json"
@@ -91,18 +92,15 @@ def load_chat(filename):
         st.session_state.messages = json.load(f)
     st.session_state.current_file = filename
 
-# --- 4. 사이드바: 대화 관리 UI ---
+# --- 4. 사이드바 UI ---
 with st.sidebar:
     st.title("📁 대화 목록")
-    
     if st.button("➕ 새 대화 시작"):
         st.session_state.messages = []
         st.session_state.current_file = None
         st.rerun()
-    
     st.divider()
 
-    # 저장된 채팅 파일 목록
     files = [f for f in os.listdir(SAVE_DIR) if f.endswith(".json")]
     for f in files:
         col1, col2 = st.columns([4, 1])
@@ -119,137 +117,73 @@ with st.sidebar:
                 st.rerun()
 
     st.divider()
-    
-    # 채팅방 이름 저장 및 수정
     if st.session_state.messages:
-        st.subheader("💾 대화 저장/이름 수정")
-        current_name_val = st.session_state.current_file.replace('.json', '') if st.session_state.current_file else ""
-        new_name = st.text_input("대화 이름 입력", value=current_name_val, placeholder="예: 첫만남")
-        
-        if st.button("파일 이름 저장 및 수정", use_container_width=True):
-            if new_name:
-                # 이름이 바뀌었다면 기존 파일 삭제 (이름 변경 효과)
-                if st.session_state.current_file and st.session_state.current_file != f"{new_name}.json":
-                    old_path = os.path.join(SAVE_DIR, st.session_state.current_file)
-                    if os.path.exists(old_path):
-                        os.remove(old_path)
-                
-                saved_filename = save_chat(new_name)
-                st.session_state.current_file = saved_filename
-                st.success(f"'{new_name}'으로 저장되었습니다.")
-                st.rerun()
-            else:
-                st.error("이름을 입력해주세요.")
+        st.subheader("💾 대화 저장")
+        current_name_val = st.session_state.current_file.replace('.json', '') if st.session_state.current_file else "새 대화"
+        new_name = st.text_input("대화 이름", value=current_name_val)
+        if st.button("저장/이름 변경"):
+            if st.session_state.current_file and st.session_state.current_file != f"{new_name}.json":
+                old_path = os.path.join(SAVE_DIR, st.session_state.current_file)
+                if os.path.exists(old_path): os.remove(old_path)
+            st.session_state.current_file = save_chat(new_name)
+            st.rerun()
 
-# --- 5. 채팅 UI 디자인 (카카오톡 최적화 CSS) ---
+# --- 5. CSS ---
 st.markdown("""
     <style>
     .stApp { background-color: #abc1d1; }
-    
-    /* 전체 채팅 행 */
     .chat-row { display: flex; width: 100%; margin-bottom: 15px; }
     .user-row { justify-content: flex-end; }
     .bot-row { justify-content: flex-start; }
-
-    /* 봇 프로필+콘텐츠 컨테이너 */
     .bot-container { display: flex; align-items: flex-start; gap: 10px; max-width: 85%; }
-
-    /* 1. 프로필 사진 고정 크기 (50x50) */
-    .profile-img {
-        width: 50px !important;
-        height: 50px !important;
-        min-width: 50px;
-        border-radius: 18px;
-        object-fit: cover;
-    }
-
-    /* 2. 이름 + 말풍선 정렬 */
-    .bot-content { display: flex; flex-direction: column; gap: 5px; } /* 이름-말풍선 간격 5px */
-    
-    .bot-name { 
-        font-size: 16px; 
-        color: #2c3e50; 
-        font-weight: 600; 
-        margin-top: 2px;
-    }
-
-    /* 3. 말풍선 설정 (가로 폭 반응형) */
-    .chat-bubble { 
-        padding: 10px 14px; 
-        border-radius: 12px; 
-        font-size: 15px; 
-        line-height: 1.5; 
-        color: #333; 
-        box-shadow: 0 1px 2px rgba(0,0,0,0.1);
-        word-break: break-all; /* 가로가 좁아지면 자동 줄바꿈 */
-    }
+    .profile-img { width: 50px !important; height: 50px !important; min-width: 50px; border-radius: 18px; object-fit: cover; }
+    .bot-content { display: flex; flex-direction: column; gap: 5px; }
+    .bot-name { font-size: 15px; color: #2c3e50; font-weight: 600; }
+    .chat-bubble { padding: 10px 14px; border-radius: 12px; font-size: 15px; line-height: 1.5; box-shadow: 0 1px 2px rgba(0,0,0,0.1); word-break: break-all; }
     .user-bubble { background-color: #fee500; border-top-right-radius: 2px; }
     .bot-bubble { background-color: #ffffff; border-top-left-radius: 2px; }
-
-    /* 지문 스타일 */
-    .action-text {
-        color: #666;
-        font-style: italic;
-        background-color: #f0f0f0;
-        padding: 1px 4px;
-        border-radius: 3px;
-        font-size: 0.9em;
-    }
+    .action-text { color: #666; font-style: italic; background-color: #f0f0f0; padding: 2px 5px; border-radius: 4px; font-size: 0.9em; }
     </style>
     """, unsafe_allow_html=True)
 
-# 상단 제목 표시
+# --- 6. 출력 및 입력 ---
 current_title = st.session_state.current_file.replace('.json', '') if st.session_state.current_file else "박보검"
 st.title(f"📱 {current_title}")
 
-# --- 6. 대화 내용 출력 ---
 for msg in st.session_state.messages:
     if msg["role"] == "user":
-        # 유저 채팅 (오른쪽 정렬)
-        st.markdown(f'''
-            <div class="chat-row user-row">
-                <div class="chat-bubble user-bubble">{msg["content"]}</div>
-            </div>
-            ''', unsafe_allow_html=True)
+        st.markdown(f'<div class="chat-row user-row"><div class="chat-bubble user-bubble">{msg["content"]}</div></div>', unsafe_allow_html=True)
     elif msg["role"] == "assistant":
-        content_html = format_chat_text(msg["content"])
-        # Base64 데이터를 src에 삽입
-        profile_html = f'<img src="data:image/jpeg;base64,{img_base64}" class="profile-img">' if img_base64 else '<div class="profile-img" style="background:#ddd;">👤</div>'
-
+        formatted_text = format_chat_text(msg["content"])
+        p_img = f'<img src="data:image/jpeg;base64,{img_base64}" class="profile-img">' if img_base64 else '<div class="profile-img" style="background:#ddd; display:flex; align-items:center; justify-content:center;">👤</div>'
         st.markdown(f'''
             <div class="chat-row bot-row">
                 <div class="bot-container">
-                    {profile_html}
+                    {p_img}
                     <div class="bot-content">
                         <div class="bot-name">박보검</div>
-                        <div class="chat-bubble bot-bubble">{content_html}</div>
+                        <div class="chat-bubble bot-bubble">{formatted_text}</div>
                     </div>
                 </div>
             </div>
             ''', unsafe_allow_html=True)
-            # 주의: 위 img 태그의 src를 "프로필사진.jpg"로 변경하여 사용하세요.
 
-# --- 7. 대화 입력 및 처리 ---
 if prompt := st.chat_input("메시지를 입력하세요..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
-    # 자동 저장 기능
-    if st.session_state.current_file:
-        save_chat(st.session_state.current_file)
+    if st.session_state.current_file: save_chat(st.session_state.current_file)
     st.rerun()
 
 if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
     with st.spinner("박보검님이 입력 중..."):
-        api_messages = [{"role": "system", "content": CHARACTER_PROMPT}] + st.session_state.messages
         try:
+            # 모델명을 확인하세요. 무료 모델은 자주 변경됩니다.
             response = client.chat.completions.create(
-                model="xiaomi/mimo-v2-flash:free",
-                messages=api_messages
+                model="xiaomi/mimo-v2-flash:free", 
+                messages=[{"role": "system", "content": CHARACTER_PROMPT}] + st.session_state.messages
             )
             full_response = response.choices[0].message.content
             st.session_state.messages.append({"role": "assistant", "content": full_response})
-            
-            if st.session_state.current_file:
-                save_chat(st.session_state.current_file)
+            if st.session_state.current_file: save_chat(st.session_state.current_file)
             st.rerun()
         except Exception as e:
-            st.error(f"오류: {e}")
+            st.error(f"오류가 발생했습니다: {e}")
